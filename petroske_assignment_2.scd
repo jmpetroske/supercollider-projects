@@ -78,8 +78,8 @@ probeSignal = Signal.newClear(size);
 probeSignal.put((size/2).asInteger, 1.0);
 
 // load probe signal into a buffer
-probeBuffer = Buffer.loadCollection(
-    server: s,
+probeBuffer = Buffer.alloc(server: s, numFrames: size);
+probeBuffer.loadCollection(
     collection: probeSignal
 );
 
@@ -96,7 +96,7 @@ synthDefBPBR.note(starttime: 0.2, duration: signalDur)
 
 
 analysisBuffer.getToFloatArray(
-    wait: wait,
+    wait: 30,
     action: {arg response;
         {
             var fftResponse, fftMagnitude;
@@ -119,9 +119,11 @@ analysisBuffer.getToFloatArray(
                 maxval: plotDbMax
             )
 
-        }.defer(defer);
+        }.defer(10);
         "done".postln;
-});
+	}
+);
+
 
 
 
