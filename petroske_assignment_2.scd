@@ -1,27 +1,23 @@
 (
-var size = 2.pow(13); // we're using the FFT, so should be a power of 2
-var plotDbMin = -24.0;
-var plotDbMax = 6.0;
-var signalDur;
-var probeSignal;
-var probeBuffer;
-var analysisBuffer;
-
-var wait = 5, defer = 5;
-
-
-var additiveFunc;
-
-var outputPath = "~/Desktop/petroske_assignment_2.wav";
+var rootDir = thisProcess.nowExecutingPath.asString.dirname;
+var outputPath = rootDir +/+ "petroske_assignment_2.wav";
 var headerFormat = "WAV";
 var sampleFormat = "int24";
 var numOutputChannels = 2;
 var sampleRate = 44100;
+var bufPlayer;
 var synthDefBPBR;
 var freq, coeffs;
-var allPass2ndOrderCoeffs;
-
+var allPass2ndOrderCoeffs, asmt2Synth;
 var sinCosPanLaw;
+
+var sample_buf;
+var sample_path = rootDir +/+ "group_5_ding.wav";
+
+var filterCoeffs, filterBuf, waveStartFrame, waveSkipTime;
+
+var score = CtkScore.new;
+
 
 sinCosPanLaw = { arg angleInDegrees = 0;
     var angleInRadians;
@@ -34,6 +30,7 @@ sinCosPanLaw = { arg angleInDegrees = 0;
     [theta.cos, theta.sin]
 };
 
+// PROBLEM 1
 allPass2ndOrderCoeffs = { arg centerFreq, bandwidth, sampleRate;
 	var c = (tan(pi * bandwidth / s.sampleRate) - 1) / (tan(pi * bandwidth / s.sampleRate) + 1);
 	var d = -1 * cos(2 * pi * centerFreq / s.sampleRate);
@@ -41,11 +38,14 @@ allPass2ndOrderCoeffs = { arg centerFreq, bandwidth, sampleRate;
     [-1*c, d*(1-c), 1, -1*d*(1-c), c];
 };
 
+// PROBLEM 1
 // 2nd-order bandpass/reject
 // bpbr is negative: band pass, bpbr is positive: band reject
-synthDefBPBR = CtkSynthDef.new(\filtAnalysisLP, { arg freq = 440.0, bandwidth, bpbr, probeBuf, analysisBuf;
+synthDefBPBR = CtkSynthDef.new(\filtAnalysisLP, {
+	arg freq = 440.0, bandwidth, bpbr, probeBuf, analysisBuf;
     var probe, response;
     var tanFac, cFac, a0, a1, a2, b1, b2;
+	var out;
 
     #a0, a1, a2, b1, b2 = allPass2ndOrderCoeffs.value(freq, bandwidth, sampleRate);
 
@@ -63,75 +63,62 @@ synthDefBPBR = CtkSynthDef.new(\filtAnalysisLP, { arg freq = 440.0, bandwidth, b
     );
 });
 
+bufPlayer = CtkSynthDef.new(\bufPlayer, {arg gain = 0, play_buf;
+	var a0, a1, a2, b1, b2;
+	var out;
+	
+	Out.ar(0, PlayBuf.ar(2, play_buf) * gain.dbamp);
+});
 
-size = 2.pow(13); // we're using the FFT, so should be a power of 2
+asmt2Synth = CtkSynthDef.new(\asmt2, {
+	arg dur, gain = 0, filter_coeffs_buf, ris, dec;
+	var a0, a1, a2, b1, b2;
+	var out;
+	var env;
+	
+    #a0, a1, a2, b1, b2 = allPass2ndOrderCoeffs.value(freq, bandwidth, sampleRate);
 
-// plot paramaters
-plotDbMin = -24.0;
-plotDbMax = 6.0;
+	env = EnvGen.ar(Env([0, 1, 1, 0], [ris, dur - ris - dec, dec], \lin));
+	
+	// Filter an impulse using the filter contained in kernel_buf (subtractive synthesis)
+	out = Convolution2.ar(WhiteNoise.ar, filter_coeffs_buf, framesize: filter_coeffs_buf.size);
+	out = (SOS.ar(out, a0, a1, a2, b1, b2) + (bpbr * out)) * 0.5;
 
-// calcs
-signalDur = size / (s.sampleRate); // duration to run synth...
+	Out.ar([0, 1], out * gain.dbamp * env);
+});
 
-// create probe signal, an impulse
-probeSignal = Signal.newClear(size);
-probeSignal.put((size/2).asInteger, 1.0);
+sample_buf = CtkBuffer.playbuf(sample_path);
+score.add(sample_buf);
 
-// load probe signal into a buffer
-probeBuffer = Buffer.alloc(server: s, numFrames: size);
-probeBuffer.loadCollection(
-    collection: probeSignal
+
+waveSkipTime = 0.454;
+waveStartFrame = (waveSkipTime * SoundFile.new(sample_path).sampleRate).asInteger;
+filterCoeffs = Signal.readKernel(sample_path, waveStartFrame, 494, normKind: "fir");
+filterCoeffs = filterCoeffs.linearPhase;
+filterBuf = CtkBuffer.collection(filterCoeffs);
+score.add(filterBuf);
+
+score.add(asmt2Synth.note(starttime: waveSkipTime - 0.1, duration: 30)
+	.dur_(30)
+	.gain_(CtkControl.env(Env([-8, 0], [3], \lin)))
+	.ris_(0.12)
+	.dec_(0.1)
+	.filter_coeffs_buf_(filterBuf)
 );
-
-// empty analysis buffer - to record filter response
-analysisBuffer = Buffer.alloc(server: s, numFrames: size);
-
-// analyse BPBR
-synthDefBPBR.note(starttime: 0.2, duration: signalDur)
-.freq_(freq)
-.probeBuf_(probeBuffer)
-.analysisBuf_(analysisBuffer)
-.bpbr_(-1)
-.play;
-
-
-analysisBuffer.getToFloatArray(
-    wait: 30,
-    action: {arg response;
-        {
-            var fftResponse, fftMagnitude;
-
-            // FFT analysis here!
-            fftResponse = fft(
-                response.as(Signal),
-                Signal.newClear(size),
-                Signal.fftCosTable(size)
-            );
-
-            // find (& trim magnitude)
-            fftMagnitude = fftResponse.magnitude;
-            fftMagnitude = fftMagnitude.copyFromStart((size/2).asInteger);
-
-            // plot magnitude spectrum of the kernel
-            fftMagnitude.ampdb.plot(
-                name: "Filter Magnitude Response",
-                minval: plotDbMin,
-                maxval: plotDbMax
-            )
-
-        }.defer(10);
-        "done".postln;
-	}
+score.add(bufPlayer.note(starttime: 0, duration: 30)
+	.gain_(0)
+	.play_buf_(sample_buf)
 );
 
 
 
-
-// score.write(
-//     path: outputPath.standardizePath,
-//     sampleRate: sampleRate,
-//     headerFormat: headerFormat,
-//     sampleFormat: sampleFormat,
-//     options: ServerOptions.new.numOutputBusChannels_(numOutputChannels)
-// );
+score.write(
+    path: outputPath.standardizePath,
+    sampleRate: sampleRate,
+    headerFormat: headerFormat,
+    sampleFormat: sampleFormat,
+    options: ServerOptions.new.numOutputBusChannels_(numOutputChannels)
+);
 )
+
+SFPlayer(thisProcess.nowExecutingPath.asString.dirname +/+ "petroske_assignment_2.wav").gui;
