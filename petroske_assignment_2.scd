@@ -1,4 +1,15 @@
 (
+var size = 2.pow(13); // we're using the FFT, so should be a power of 2
+var plotDbMin = -24.0;
+var plotDbMax = 6.0;
+var signalDur;
+var probeSignal;
+var probeBuffer;
+var analysisBuffer;
+
+var wait = 5, defer = 5;
+
+
 var additiveFunc;
 
 var outputPath = "~/Desktop/petroske_assignment_2.wav";
@@ -6,7 +17,7 @@ var headerFormat = "WAV";
 var sampleFormat = "int24";
 var numOutputChannels = 2;
 var sampleRate = 44100;
-var synthDefLP, synthDefHP;
+var synthDefBPBR;
 var freq, coeffs;
 var allPass2ndOrderCoeffs;
 
@@ -24,20 +35,19 @@ sinCosPanLaw = { arg angleInDegrees = 0;
 };
 
 allPass2ndOrderCoeffs = { arg centerFreq, bandwidth, sampleRate;
-	var c = (tan(pi * bandwidth / sampleRate) - 1) / (tan(pi * bandwidth / sampleRate) + 1);
-	var d = -1 * cos(2 * pi * centerFreq / sampleRate);
+	var c = (tan(pi * bandwidth / s.sampleRate) - 1) / (tan(pi * bandwidth / s.sampleRate) + 1);
+	var d = -1 * cos(2 * pi * centerFreq / s.sampleRate);
 
     [-1*c, d*(1-c), 1, -1*d*(1-c), c];
 };
-
 
 // 2nd-order bandpass/reject
 // bpbr is negative: band pass, bpbr is positive: band reject
 synthDefBPBR = CtkSynthDef.new(\filtAnalysisLP, { arg freq = 440.0, bandwidth, bpbr, probeBuf, analysisBuf;
     var probe, response;
-    var tanFac, cFac, a0, a1, b1;
+    var tanFac, cFac, a0, a1, a2, b1, b2;
 
-    #a0, a1, a2, b1, b2 = filtCoeffsFunc.value(freq, bandwidth, sampleRate);
+    #a0, a1, a2, b1, b2 = allPass2ndOrderCoeffs.value(freq, bandwidth, sampleRate);
 
     // play probe signal (impulse)
     probe = PlayBuf.ar(numChannels: 1, bufnum: probeBuf);
@@ -53,22 +63,39 @@ synthDefBPBR = CtkSynthDef.new(\filtAnalysisLP, { arg freq = 440.0, bandwidth, b
     );
 });
 
+
+size = 2.pow(13); // we're using the FFT, so should be a power of 2
+
+// plot paramaters
+plotDbMin = -24.0;
+plotDbMax = 6.0;
+
+// calcs
+signalDur = size / (s.sampleRate); // duration to run synth...
+
+// create probe signal, an impulse
+probeSignal = Signal.newClear(size);
+probeSignal.put((size/2).asInteger, 1.0);
+
+// load probe signal into a buffer
+probeBuffer = Buffer.loadCollection(
+    server: s,
+    collection: probeSignal
+);
+
+// empty analysis buffer - to record filter response
+analysisBuffer = Buffer.alloc(server: s, numFrames: size);
+
 // analyse BPBR
-synthDefLP.note(starttime: 0.2, duration: ~signalDur)
+synthDefBPBR.note(starttime: 0.2, duration: signalDur)
 .freq_(freq)
-.probeBuf_(~probeBuffer)
-.analysisBuf_(~analysisBuffer)
+.probeBuf_(probeBuffer)
+.analysisBuf_(analysisBuffer)
 .bpbr_(-1)
 .play;
 
 
-// 3) Plot analysis (via FFT)
-//
-// NOTE: FFT returns linear frequency
-(
-var wait = 0.01, defer = 0.1;
-
-~analysisBuffer.getToFloatArray(
+analysisBuffer.getToFloatArray(
     wait: wait,
     action: {arg response;
         {
@@ -77,25 +104,24 @@ var wait = 0.01, defer = 0.1;
             // FFT analysis here!
             fftResponse = fft(
                 response.as(Signal),
-                Signal.newClear(~size),
-                Signal.fftCosTable(~size)
+                Signal.newClear(size),
+                Signal.fftCosTable(size)
             );
 
             // find (& trim magnitude)
             fftMagnitude = fftResponse.magnitude;
-            fftMagnitude = fftMagnitude.copyFromStart((~size/2).asInteger);
+            fftMagnitude = fftMagnitude.copyFromStart((size/2).asInteger);
 
             // plot magnitude spectrum of the kernel
             fftMagnitude.ampdb.plot(
                 name: "Filter Magnitude Response",
-                minval: ~plotDbMin,
-                maxval: ~plotDbMax
+                minval: plotDbMin,
+                maxval: plotDbMax
             )
 
         }.defer(defer);
         "done".postln;
 });
-)
 
 
 
