@@ -32,8 +32,8 @@ sinCosPanLaw = { arg angleInDegrees = 0;
 
 // PROBLEM 1
 allPass2ndOrderCoeffs = { arg centerFreq, bandwidth, sampleRate;
-	var c = (tan(pi * bandwidth / s.sampleRate) - 1) / (tan(pi * bandwidth / s.sampleRate) + 1);
-	var d = -1 * cos(2 * pi * centerFreq / s.sampleRate);
+	var c = (tan(pi * bandwidth / sampleRate) - 1) / (tan(pi * bandwidth / sampleRate) + 1);
+	var d = -1 * cos(2 * pi * centerFreq / sampleRate);
 
     [-1*c, d*(1-c), 1, -1*d*(1-c), c];
 };
@@ -47,7 +47,7 @@ synthDefBPBR = CtkSynthDef.new(\filtAnalysisLP, {
     var tanFac, cFac, a0, a1, a2, b1, b2;
 	var out;
 
-    #a0, a1, a2, b1, b2 = allPass2ndOrderCoeffs.value(freq, bandwidth, sampleRate);
+    #a0, a1, a2, b1, b2 = allPass2ndOrderCoeffs.value(freq, bandwidth, SampleRate.ir);
 
     // play probe signal (impulse)
     probe = PlayBuf.ar(numChannels: 1, bufnum: probeBuf);
@@ -63,6 +63,8 @@ synthDefBPBR = CtkSynthDef.new(\filtAnalysisLP, {
     );
 });
 
+
+// PROBLEM 2
 bufPlayer = CtkSynthDef.new(\bufPlayer, {arg gain = 0, play_buf;
 	var a0, a1, a2, b1, b2;
 	var out;
@@ -76,13 +78,16 @@ asmt2Synth = CtkSynthDef.new(\asmt2, {
 	var out;
 	var env;
 	
-    #a0, a1, a2, b1, b2 = allPass2ndOrderCoeffs.value(freq, bandwidth, sampleRate);
+    #a0, a1, a2, b1, b2 = allPass2ndOrderCoeffs.value(
+		EnvGen.ar(Env([494,494*2,494,494*3],[5,5,20],\exp)),
+		EnvGen.ar(Env([5,100,400,5],[10,15,5],\lin)),
+		SampleRate.ir);
 
 	env = EnvGen.ar(Env([0, 1, 1, 0], [ris, dur - ris - dec, dec], \lin));
 	
 	// Filter an impulse using the filter contained in kernel_buf (subtractive synthesis)
 	out = Convolution2.ar(WhiteNoise.ar, filter_coeffs_buf, framesize: filter_coeffs_buf.size);
-	out = (SOS.ar(out, a0, a1, a2, b1, b2) + (bpbr * out)) * 0.5;
+	out = (SOS.ar(out, a0, a1, a2, b1, b2) + (-1 * out)) * 0.5;
 
 	Out.ar([0, 1], out * gain.dbamp * env);
 });
@@ -102,7 +107,7 @@ score.add(asmt2Synth.note(starttime: waveSkipTime - 0.1, duration: 30)
 	.dur_(30)
 	.gain_(CtkControl.env(Env([-8, 0], [3], \lin)))
 	.ris_(0.12)
-	.dec_(0.1)
+	.dec_(2)
 	.filter_coeffs_buf_(filterBuf)
 );
 score.add(bufPlayer.note(starttime: 0, duration: 30)

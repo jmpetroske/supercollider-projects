@@ -1,6 +1,10 @@
 s = Server.local.boot;
 s.quit;
 
+Stethoscope.new(s, 2);
+FreqScope.new;
+
+
 SCDoc.renderAll
 
 "SC_JACK_DEFAULT_INPUTS".setenv("system:capture_1");
