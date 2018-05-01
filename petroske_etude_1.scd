@@ -6,7 +6,10 @@ var sampleFormat = "int24";
 var numOutputChannels = 2;
 var sampleRate = 44100;
 
+var score = CtkScore.new;
+
 var sinCosPanLaw;
+var sync_grain_buf_synth, shepard_synth;
 
 var sample1_buf;
 var sample1_path = rootDir +/+ "dull_jingle.wav";
@@ -41,6 +44,8 @@ sinCosPanLaw = { arg angleInDegrees = 0;
     [theta.cos, theta.sin]
 };
 
+env_plaer
+
 sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ris = 0.1, dec = 0.1, playbackRate = 1, envFreq, grainFreq, periodFreq = 200, buffer = 0, panAngle = 0.0;
     var trigger;
     var granSig = 0;
@@ -50,13 +55,14 @@ sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ri
 	var numPeriods = periodFreq * BufDur.kr(buffer);
 
     ampEnv = EnvGen.kr(
-        Env.linen(ris, 1.0 - (ris + dec), dec),
-        timeScale: dur
+        Env.linen(ris, dur - (ris + dec), dec),
     );
 
     trigger = Impulse.ar(grainFreq); // async trigger
-	index = ((LFSaw.ar(BufDur.kr(buffer).reciprocal * playbackRate, 1) + 1) * numPeriods).floor / numPeriods;
-	//	index = Line.ar(0, numPeriods, dur).floor / numPeriods;
+	// Does the same thing as the Line.ar version, but handles playbackRate changes better
+	index = Phasor.ar(0, playbackRate / (SampleRate.ir * BufDur.kr(buffer)), 0, 1);
+	index = (index * numPeriods).floor / numPeriods; // periodize the index
+	// index = ((LFSaw.ar(BufDur.kr(buffer).reciprocal * playbackRate, 1) + 1) * numPeriods).floor / numPeriods;
 
     granSig = GrainBuf.ar(
 		numChannels: 1,
@@ -70,6 +76,25 @@ sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ri
     Out.ar(0, gain.dbamp * ampEnv * granSig * sinCosPanLaw.value(panAngle));
 });
 
+{
+	arg duration, gain = -6;
+	
+	var doubleSpeedTime = 10;
+	var env1 = Env.circle([0.125, 0.25, 0.5, 1], [doubleSpeedTime,doubleSpeedTime,doubleSpeedTime,0], \exp);
+	var env2 = Env.circle([0.25, 0.5, 1, 0.125], [doubleSpeedTime,doubleSpeedTime,0,doubleSpeedTime], \exp);
+	var env3 = Env.circle([0.5, 1, 0.125, 0.25], [doubleSpeedTime,0,doubleSpeedTime,doubleSpeedTime], \exp);
+	
+	score.add(sync_grain_buf_synth.note(starttime: 0, duration: 120)
+		.dur_(120)
+		.gain_(4)
+		.envFreq_(CtkControl.env(env1, levelScale: 50 * 4))
+		.grainFreq_(CtkControl.env(env1, levelScale: 100 * 4))
+		.buffer_(sample1_buf)
+		.panAngle_(0)
+		.playbackRate_(CtkControl.env(env1, levelScale: 4))
+	);
+}.value;
+
 score.write(
     path: outputPath.standardizePath,
     sampleRate: sampleRate,
@@ -78,4 +103,4 @@ score.write(
     options: ServerOptions.new.numOutputBusChannels_(numOutputChannels)
 );
 )
-
+SFPlayer(thisProcess.nowExecutingPath.asString.dirname +/+ "petroske_etude_1.wav").gui;
