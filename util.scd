@@ -20,7 +20,8 @@ Platform.userExtensionDir
 (
 var additiveFunc;
 
-var outputPath = "~/Desktop/petroske_final.wav";
+var rootDir = thisProcess.nowExecutingPath.asString.dirname;
+var outputPath = rootDir +/+ "petroske_assignment_x.wav";
 var headerFormat = "WAV";
 var sampleFormat = "int24";
 var numOutputChannels = 2;
@@ -32,7 +33,7 @@ sinCosPanLaw = { arg angleInDegrees = 0;
     var angleInRadians;
     var theta;
 
-    angleInRadians = -angleInDegrees/180*pi;
+    angleInRadians = -1 * angleInDegrees/180*pi;
 
     theta = pi/4 - angleInRadians;
 

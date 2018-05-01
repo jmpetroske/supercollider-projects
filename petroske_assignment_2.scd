@@ -1,6 +1,6 @@
 (
 var rootDir = thisProcess.nowExecutingPath.asString.dirname;
-var outputPath = rootDir +/+ "petroske_assignment_2.wav";
+var outputPath = rootDir +/+ "petroske_2.wav";
 var headerFormat = "WAV";
 var sampleFormat = "int24";
 var numOutputChannels = 2;
@@ -80,7 +80,7 @@ asmt2Synth = CtkSynthDef.new(\asmt2, {
 	
     #a0, a1, a2, b1, b2 = allPass2ndOrderCoeffs.value(
 		EnvGen.ar(Env([494,494*2,494,494*3],[5,5,20],\exp)),
-		EnvGen.ar(Env([5,100,400,5],[10,15,5],\lin)),
+		EnvGen.ar(Env([20,100,400,5],[10,15,5],\exp)),
 		SampleRate.ir);
 
 	env = EnvGen.ar(Env([0, 1, 1, 0], [ris, dur - ris - dec, dec], \lin));
@@ -95,10 +95,9 @@ asmt2Synth = CtkSynthDef.new(\asmt2, {
 sample_buf = CtkBuffer.playbuf(sample_path);
 score.add(sample_buf);
 
-
 waveSkipTime = 0.454;
 waveStartFrame = (waveSkipTime * SoundFile.new(sample_path).sampleRate).asInteger;
-filterCoeffs = Signal.readKernel(sample_path, waveStartFrame, 494, normKind: "fir");
+filterCoeffs = Signal.readKernel(sample_path, waveStartFrame, 494, 3 * 2, normKind: "fir");
 filterCoeffs = filterCoeffs.linearPhase;
 filterBuf = CtkBuffer.collection(filterCoeffs);
 score.add(filterBuf);
@@ -126,4 +125,4 @@ score.write(
 );
 )
 
-SFPlayer(thisProcess.nowExecutingPath.asString.dirname +/+ "petroske_assignment_2.wav").gui;
+SFPlayer(thisProcess.nowExecutingPath.asString.dirname +/+ "petroske_2.wav").gui;
