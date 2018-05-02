@@ -13,25 +13,31 @@ var sinCosPanLaw;
 var env_player;
 var sync_grain_buf_synth, shepard_synth;
 
-var sample1_buf;
+var sample1_buf_0;
+var sample1_buf_1;
 var sample1_path = rootDir +/+ "dull_jingle.wav";
 var sample2_buf;
 var sample2_path = rootDir +/+ "group_1_bells.wav";
 var sample3_buf;
 var sample3_path = rootDir +/+ "group_1_bells_scratchy.wav";
-var sample4_buf;
+var sample4_buf_0;
+var sample4_buf_1;
 var sample4_path = rootDir +/+ "group_1_noise_rhythmic.wav";
 var sample5_buf;
 var sample5_path = rootDir +/+ "group_2_bell.wav";
 
-sample1_buf = CtkBuffer.playbuf(sample1_path, channels: 0);
-score.add(sample1_buf);
+sample1_buf_0 = CtkBuffer.playbuf(sample1_path, channels: 0);
+sample1_buf_1 = CtkBuffer.playbuf(sample1_path, channels: 1);
+score.add(sample1_buf_0);
+score.add(sample1_buf_1);
 sample2_buf = CtkBuffer.playbuf(sample2_path, channels: 0);
 score.add(sample2_buf);
 sample3_buf = CtkBuffer.playbuf(sample3_path, channels: 0);
 score.add(sample3_buf);
-sample4_buf = CtkBuffer.playbuf(sample4_path, channels: 0);
-score.add(sample4_buf);
+sample4_buf_0 = CtkBuffer.playbuf(sample4_path, channels: 0);
+sample4_buf_1 = CtkBuffer.playbuf(sample4_path, channels: 1);
+score.add(sample4_buf_0);
+score.add(sample4_buf_1);
 sample5_buf = CtkBuffer.playbuf(sample5_path, channels: 0);
 score.add(sample5_buf);
 
@@ -46,13 +52,13 @@ sinCosPanLaw = { arg angleInDegrees = 0;
     [theta.cos, theta.sin]
 };
 
-sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ris = 0.1, dec = 0.1, playbackRate = 1, envFreq, grainFreq, periodFreq = 200, buffer = 0, panAngle = 0.0;
+sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ris = 0.1, dec = 0.1, playbackRate = 1, envFreq, grainFreq, periodFreq = 200, buffer_left = 0, buffer_right = 0, outBus = 0, panAngle = 0.0;
     var trigger;
-    var granSig = 0;
+    var granSig0, granSig1;
     var out;
     var ampEnv;
 	var index;
-	var numPeriods = periodFreq * BufDur.kr(buffer);
+	var numPeriods = periodFreq * BufDur.kr(buffer_left);
 
     ampEnv = EnvGen.kr(
         Env.linen(ris, dur - (ris + dec), dec),
@@ -60,20 +66,31 @@ sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ri
 
     trigger = Impulse.ar(grainFreq); // async trigger
 	// Does the same thing as the Line.ar version, but handles playbackRate changes better
-	index = Phasor.ar(0, playbackRate / (SampleRate.ir * BufDur.kr(buffer)), 0, 1);
+	index = Phasor.ar(0, playbackRate / (SampleRate.ir * BufDur.kr(buffer_left)), 0, 1);
 	index = (index * numPeriods).floor / numPeriods; // periodize the index
 	// index = ((LFSaw.ar(BufDur.kr(buffer).reciprocal * playbackRate, 1) + 1) * numPeriods).floor / numPeriods;
 
-    granSig = GrainBuf.ar(
+    granSig0 = GrainBuf.ar(
 		numChannels: 1,
 		trigger: trigger,
 		dur: envFreq.reciprocal,
-		sndbuf: buffer,
+		sndbuf: buffer_left,
 		rate: playbackRate,
-		pos: index
+		pos: index,
+		pan: -1
 	);
 
-    Out.ar(0, gain.dbamp * ampEnv * granSig * sinCosPanLaw.value(panAngle));
+	granSig1 = GrainBuf.ar(
+		numChannels: 2,
+		trigger: trigger,
+		dur: envFreq.reciprocal,
+		sndbuf: buffer_right,
+		rate: playbackRate,
+		pos: index,
+		pan: 1
+	);
+
+    Out.ar(outBus, gain.dbamp * ampEnv * (granSig0 + granSig1) * sinCosPanLaw.value(panAngle));
 });
 
 {
@@ -84,16 +101,43 @@ sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ri
 	var env2 = Env.circle([0.25, 0.5, 1, 0.125], [1,1,0,1], \exp);
 	var env3 = Env.circle([0.5, 1, 0.125, 0.25], [1,0,1,1], \exp);
 
-	score.add(sync_grain_buf_synth.note(starttime: 0, duration: 120)
-		.dur_(120)
-		.gain_(4)
-		.envFreq_(CtkControl.env(env1, timeScale: doubleSpeedTime, levelScale: 50 * 4))
+	score.add(sync_grain_buf_synth.note(starttime: 0, duration: 60)
+		.dur_(60)
+		.gain_(CtkControl.env(Env([4,6,-3,-25,-25,-6],[5,20,4,9,1])))
+		.envFreq_(CtkControl.env(env1, timeScale: doubleSpeedTime, levelScale: 25 * 2.01))
 		.grainFreq_(CtkControl.env(env1, timeScale: doubleSpeedTime, levelScale: 100 * 4))
-		.buffer_(sample1_buf)
-		.panAngle_(0)
-		.playbackRate_(CtkControl.env(env1, timeScale: doubleSpeedTime, levelScale: 4))
+		.buffer_left_(sample1_buf_0)
+		.buffer_right_(sample1_buf_1)
+		.panAngle_(-10)
+		.playbackRate_(CtkControl.env(env1, timeScale: doubleSpeedTime, levelScale: 2))
 	);
 }.value;
+
+score.add(sync_grain_buf_synth.note(starttime: 2, duration: 8.5)
+	.dur_(8.5)
+	.gain_(CtkControl.env(Env([-40,-12],[8.5],-2)))
+	.envFreq_(40)
+	.grainFreq_(CtkControl.env(Env([40,70])))
+	.periodFreq_(80)
+	.buffer_left_(sample4_buf_0)
+	.buffer_right_(sample4_buf_1)
+	.panAngle_(0)
+	.playbackRate_(CtkControl.env(Env([0.5,0.7],[8.5])))
+);
+
+
+score.add(sync_grain_buf_synth.note(starttime: 10.5, duration: 40)
+	.dur_(40)
+	.gain_(CtkControl.env(Env([0,-12,-6],[0.08,5])))
+	.envFreq_(200)
+	.ris_(0.02)
+	.grainFreq_(CtkControl.env(Env([200,400],[20],\exp)))
+	.periodFreq_(400)
+	.buffer_left_(sample4_buf_0)
+	.buffer_right_(sample4_buf_1)
+	.panAngle_(0)
+	.playbackRate_(CtkControl.env(Env([3,0.7,1,-1],[0.08,9.92,20])))
+);
 
 score.write(
     path: outputPath.standardizePath,

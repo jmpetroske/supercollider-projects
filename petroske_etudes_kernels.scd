@@ -1,6 +1,5 @@
 (
 var rootDir = thisProcess.nowExecutingPath.asString.dirname;
-var outputPath = rootDir +/+ "petroske_etude_1.wav";
 var headerFormat = "WAV";
 var sampleFormat = "int24";
 var numOutputChannels = 2;
@@ -65,8 +64,8 @@ var plotKernelSpectrum = {
 
 // 1765 reference frequency found using audacity
 // From group 6, person one. group_6_bell_for_fir.wav is a section of the recoreding that has only been amplified
-make_and_write_fir_kernel.value(rootDir +/+ "group_6_bell_for_fir.wav", rootDir +/+ "group_6_bell_fir_kernel.wav",
-	0, 1765, 25, 'fir', plot: true);
+make_and_write_fir_kernel.value(rootDir +/+ "fir" +/+ "src" +/+ "group_6_bell.wav", rootDir +/+ "fir" +/+ "kernels" +/+ "group_6_bell.wav",
+	0, 1765, 25, 'fir', plot: false);
 )
 
 
