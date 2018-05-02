@@ -12,6 +12,9 @@ var sinCosPanLaw;
 
 var env_player;
 var sync_grain_buf_synth, shepard_synth;
+var fir_filter;
+
+var route1 = CtkAudio.new(2);
 
 var sample1_buf_0;
 var sample1_buf_1;
@@ -25,6 +28,8 @@ var sample4_buf_1;
 var sample4_path = rootDir +/+ "sounds" +/+ "group_1_noise_rhythmic.wav";
 var sample5_buf;
 var sample5_path = rootDir +/+ "sounds" +/+ "group_2_bell.wav";
+
+var kernel1_buf = CtkBuffer(rootDir +/+ "fir" +/+ "kernels" +/+ "group_6_bell.wav");
 
 sample1_buf_0 = CtkBuffer.playbuf(sample1_path, channels: 0);
 sample1_buf_1 = CtkBuffer.playbuf(sample1_path, channels: 1);
@@ -41,6 +46,8 @@ score.add(sample4_buf_1);
 sample5_buf = CtkBuffer.playbuf(sample5_path, channels: 0);
 score.add(sample5_buf);
 
+score.add(kernel1_buf);
+
 sinCosPanLaw = { arg angleInDegrees = 0;
     var angleInRadians;
     var theta;
@@ -52,7 +59,17 @@ sinCosPanLaw = { arg angleInDegrees = 0;
     [theta.cos, theta.sin]
 };
 
-sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ris = 0.1, dec = 0.1, playbackRate = 1, envFreq, grainFreq, periodFreq = 200, buffer_left = 0, buffer_right = 0, outBus = 0, panAngle = 0.0;
+// drywet: 0 = no filtering, 1 = maximum filtering
+fir_filter = CtkSynthDef.new(\fir_filter, {
+	arg inbus, outbus = 0, filterBuf, drywet = 1;
+
+	var dry = In.ar(inbus, 2);
+	var wet = Convolution2.ar(dry, filterBuf, framesize: filterBuf.size);
+
+	Out.ar(outbus, XFade2.ar(dry, wet, (drywet * 2) - 1));
+});
+
+sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ris = 0.1, dec = 0.1, playbackRate = 1, envFreq, grainFreq, periodFreq = 200, buffer_left = 0, buffer_right = 0, outbus = 0, panAngle = 0.0;
     var trigger;
     var granSig0, granSig1;
     var out;
@@ -90,7 +107,7 @@ sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ri
 		pan: 1
 	);
 
-    Out.ar(outBus, gain.dbamp * ampEnv * (granSig0 + granSig1) * sinCosPanLaw.value(panAngle));
+    Out.ar(outbus, gain.dbamp * ampEnv * (granSig0 + granSig1) * sinCosPanLaw.value(panAngle));
 });
 
 {
@@ -101,9 +118,9 @@ sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ri
 	var env2 = Env.circle([0.25, 0.5, 1, 0.125], [1,1,0,1], \exp);
 	var env3 = Env.circle([0.5, 1, 0.125, 0.25], [1,0,1,1], \exp);
 
-	score.add(sync_grain_buf_synth.note(starttime: 0, duration: 60)
-		.dur_(60)
-		.gain_(CtkControl.env(Env([4,6,-3,-25,-25,-6],[5,20,4,9,1])))
+	score.add(sync_grain_buf_synth.note(starttime: 0, duration: 50)
+		.dur_(50)
+		.gain_(CtkControl.env(Env([4,6,-3,-25,-25,-6,-25],[5,20,4,9,1,11])))
 		.envFreq_(CtkControl.env(env1, timeScale: doubleSpeedTime, levelScale: 25 * 2.01))
 		.grainFreq_(CtkControl.env(env1, timeScale: doubleSpeedTime, levelScale: 100 * 4))
 		.buffer_left_(sample1_buf_0)
@@ -123,12 +140,11 @@ score.add(sync_grain_buf_synth.note(starttime: 2, duration: 8.5)
 	.buffer_right_(sample4_buf_1)
 	.panAngle_(0)
 	.playbackRate_(CtkControl.env(Env([0.5,0.7],[8.5])))
+	.outbus_(route1)
 );
-
-
-score.add(sync_grain_buf_synth.note(starttime: 10.5, duration: 40)
-	.dur_(40)
-	.gain_(CtkControl.env(Env([0,-12,-6],[0.08,5])))
+score.add(sync_grain_buf_synth.note(starttime: 10.5, duration: 45)
+	.dur_(45)
+	.gain_(CtkControl.env(Env([0,-12,-6,-6,6,6,-12,-45],[0.08,5,13,9,6,6,5])))
 	.envFreq_(200)
 	.ris_(0.02)
 	.grainFreq_(CtkControl.env(Env([200,400],[20],\exp)))
@@ -136,8 +152,17 @@ score.add(sync_grain_buf_synth.note(starttime: 10.5, duration: 40)
 	.buffer_left_(sample4_buf_0)
 	.buffer_right_(sample4_buf_1)
 	.panAngle_(0)
-	.playbackRate_(CtkControl.env(Env([3,0.7,1,-1],[0.08,9.92,20])))
+	.playbackRate_(CtkControl.env(Env([3,0.7,1,-1,-0.7],[0.08,9.92,20,8])))
+	.outbus_(route1) 
 );
+
+score.add(fir_filter.note(starttime: 0, duration: 55.5)
+	.inbus_(route1)
+	.outbus_(0)
+	.filterBuf_(kernel1_buf)
+	.drywet_(CtkControl.env(Env([0,0,1,1],[33,9,4])))
+);
+
 
 score.write(
     path: outputPath.standardizePath,
