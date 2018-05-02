@@ -9,6 +9,8 @@ var sampleRate = 44100;
 var score = CtkScore.new;
 
 var sinCosPanLaw;
+
+var env_player;
 var sync_grain_buf_synth, shepard_synth;
 
 var sample1_buf;
@@ -44,8 +46,6 @@ sinCosPanLaw = { arg angleInDegrees = 0;
     [theta.cos, theta.sin]
 };
 
-env_plaer
-
 sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ris = 0.1, dec = 0.1, playbackRate = 1, envFreq, grainFreq, periodFreq = 200, buffer = 0, panAngle = 0.0;
     var trigger;
     var granSig = 0;
@@ -80,18 +80,18 @@ sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ri
 	arg duration, gain = -6;
 	
 	var doubleSpeedTime = 10;
-	var env1 = Env.circle([0.125, 0.25, 0.5, 1], [doubleSpeedTime,doubleSpeedTime,doubleSpeedTime,0], \exp);
-	var env2 = Env.circle([0.25, 0.5, 1, 0.125], [doubleSpeedTime,doubleSpeedTime,0,doubleSpeedTime], \exp);
-	var env3 = Env.circle([0.5, 1, 0.125, 0.25], [doubleSpeedTime,0,doubleSpeedTime,doubleSpeedTime], \exp);
-	
+	var env1 = Env.circle([0.125, 0.25, 0.5, 1], [1,1,1,0], \exp);
+	var env2 = Env.circle([0.25, 0.5, 1, 0.125], [1,1,0,1], \exp);
+	var env3 = Env.circle([0.5, 1, 0.125, 0.25], [1,0,1,1], \exp);
+
 	score.add(sync_grain_buf_synth.note(starttime: 0, duration: 120)
 		.dur_(120)
 		.gain_(4)
-		.envFreq_(CtkControl.env(env1, levelScale: 50 * 4))
-		.grainFreq_(CtkControl.env(env1, levelScale: 100 * 4))
+		.envFreq_(CtkControl.env(env1, timeScale: doubleSpeedTime, levelScale: 50 * 4))
+		.grainFreq_(CtkControl.env(env1, timeScale: doubleSpeedTime, levelScale: 100 * 4))
 		.buffer_(sample1_buf)
 		.panAngle_(0)
-		.playbackRate_(CtkControl.env(env1, levelScale: 4))
+		.playbackRate_(CtkControl.env(env1, timeScale: doubleSpeedTime, levelScale: 4))
 	);
 }.value;
 
