@@ -1,6 +1,6 @@
 (
 var rootDir = thisProcess.nowExecutingPath.asString.dirname;
-var outputPath = rootDir +/+ "petroske_etude_1.wav";
+var outputPath = rootDir +/+ "out" +/+ "petroske_etude_1.wav";
 var headerFormat = "WAV";
 var sampleFormat = "int24";
 var numOutputChannels = 2;
@@ -15,16 +15,16 @@ var sync_grain_buf_synth, shepard_synth;
 
 var sample1_buf_0;
 var sample1_buf_1;
-var sample1_path = rootDir +/+ "dull_jingle.wav";
+var sample1_path = rootDir +/+ "sounds" +/+ "dull_jingle.wav";
 var sample2_buf;
-var sample2_path = rootDir +/+ "group_1_bells.wav";
+var sample2_path = rootDir +/+ "sounds" +/+ "group_1_bells.wav";
 var sample3_buf;
-var sample3_path = rootDir +/+ "group_1_bells_scratchy.wav";
+var sample3_path = rootDir +/+ "sounds" +/+ "group_1_bells_scratchy.wav";
 var sample4_buf_0;
 var sample4_buf_1;
-var sample4_path = rootDir +/+ "group_1_noise_rhythmic.wav";
+var sample4_path = rootDir +/+ "sounds" +/+ "group_1_noise_rhythmic.wav";
 var sample5_buf;
-var sample5_path = rootDir +/+ "group_2_bell.wav";
+var sample5_path = rootDir +/+ "sounds" +/+ "group_2_bell.wav";
 
 sample1_buf_0 = CtkBuffer.playbuf(sample1_path, channels: 0);
 sample1_buf_1 = CtkBuffer.playbuf(sample1_path, channels: 1);
@@ -147,4 +147,4 @@ score.write(
     options: ServerOptions.new.numOutputBusChannels_(numOutputChannels)
 );
 )
-SFPlayer(thisProcess.nowExecutingPath.asString.dirname +/+ "petroske_etude_1.wav").gui;
+SFPlayer(thisProcess.nowExecutingPath.asString.dirname +/+ "out" +/+ "petroske_etude_1.wav").gui;
