@@ -320,7 +320,7 @@ Array.series(7, 5, 5).do({arg now, i;
 		.periodFreq_(refFreq)
 		.buffer_left_(sample5_buf_0)
 		.buffer_right_(sample5_buf_1)
-		.panAngle_(CtkControl.env(Env([-30.rrand(-20), 20.rrand(30)] * ((2 * i.mod(2)) - 1), [2.5])))
+		.panAngle_(CtkControl.env(Env([-40.rrand(-30), 30.rrand(40)] * ((2 * i.mod(2)) - 1), [2.5])))
 		.outbus_(route2)
 	);
 });
