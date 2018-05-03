@@ -266,14 +266,6 @@ synthDefLPHP = CtkSynthDef.new(\filtAnalysisLP, { arg freq = 440.0, inbus, drywe
 	var width = 5;
 	var lowIndex = Env([0, numFreqs - width - 1], [40], \lin);
 
-	// var density = Env.noise2LFO(
-	// 	rate: 10,
-	// 	lo: 1,
-	// 	hi: 2,
-	// 	duration: totalDuration,
-	// 	mode: 'rand'
-	// );
-
 	var refFreq = 494;
 	var playbackRate = 1;
 	var q = 1;
@@ -298,19 +290,6 @@ synthDefLPHP = CtkSynthDef.new(\filtAnalysisLP, { arg freq = 440.0, inbus, drywe
 		now = now + 0.1.rrand(0.2);
 	});
 
-	// odd_comb_synth = CtkSynthDef(\oddcomb, {
-    // arg freq, freq1, minFreq, bFac, inbus, outbus = 0, dur, start, gain, combGain;
-	// score.add(even_comb_synth.note(starttime: 0, duration: 50)
-	// 	.inbus_(route1)
-	// 	.outbus_(0)
-	// 	.freq_(CtkControl.lfo(SinOsc, 0.1, refFreq, refFreq * 2))
-	// 	.bFac_(20)
-	// 	.dur_(5)
-	// 	.gain_(12)
-	// 	.combGain_(-24)
-	// );
-	// synthDefBPBR = CtkSynthDef.new(\filtAnalysisLP, {
-	// arg freq = 440.0, bandwidth, bpbr, drywet, inbus, outbus = 0;
 	{
 		var freqEnv = Env([2, 2, 1, 1, 4, 4, 2, 2, 8, 8, 4, 4, 16, 16, 8, 8] * refFreq, [4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1], \exp);
 		score.add(synthDefBPBR.note(starttime: 0, duration: 45)
