@@ -1,0 +1,13 @@
+One piece that I was particularly inspired by was Unsound Objects by Jonty Harrison. I tried to emulate his sounds in each of my etudes. For each etude drawing, I put some notes on the how I used the synthesis techniques, which is perhaps easier (due to the visualness) to understand than reading the following text.
+
+Etude 1:
+In etude 1, I used two different samples layered on top of each other. The first sample I used was jingling climbing gear. When I used TSP on this sample, I found I could get it to sound strikingly similar to 7:32 in Unsound Objects. Later on in Unsound Objects, I noticed Harrison using noisy samples, so I also used a sample that was noisy for another sample. I again messed with the sample using TSP, but also used FIR filtering with a kernel I made from one of the samples in class of a metallic bowl sounding thing.
+
+Etude 2:
+In this piece, I was inspired by the beginning of Mpingo. The beginning has a bunch of notes generated of a sample layered on top of each other, so I did the sample thing with a sample I liked. I picked the notes I wanted using pythagorian tuning, and used TSP to tune them to the proper pitch. Over time, I started to use notes from a higher register. I also filtered this using a band pass filter made from a 2nd order all pass filter. I also played a metallic synth in parts that I used a high pass filter on that slowly evolved throughout the etude.
+
+Etude 3:
+This piece was a little more free form for me, and I didn't try to mimic any piece in particular. On this etude, I had 3 different samples I was playing. The first was a metallic bell sounding sample, that I reversed in time. Each time I played this note, I crescendod, but I also applied a low pass filter that I enveloped the parameters to over time randomly. At the start of each note invocation, I also used TSP to create a glissando effect at the beginning.
+The second sample came from jingling climbing gear. I played this sample whenever the first sample wasn't playing. I used additive synthesis here, layering the same sample multiple times with different parameters. I also used a comb filter on it that I modified the freq argument to over time, similar to Sud. I also used TSP to give it the sound that I wanted.
+The third sample was a noisy sample that I filtered with TSP, a FIR filter with a bell kernel (that I made from one of the samples recorded), and a comb filter. For each of these filters, I modified the parameters over time - see my visual score
+  
