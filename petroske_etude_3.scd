@@ -267,8 +267,6 @@ Array.series(4, 0, 10).do({arg now, i;
 	var freqRatio = 1;
 	var playbackRate = -1;
 
-	var dipMoment1, dipMoment2;
-	
 	now = now + 0.01 + 0.rrand(0.1);
 	
 	score.add(sync_grain_buf_synth.note(starttime: now, duration: 8)
