@@ -18,8 +18,6 @@ Platform.userExtensionDir
 (Platform.userExtensionDir +/+ "DXARTS/HelpSource/Assignments/DXARTS-462").mkdir;
 
 (
-var additiveFunc;
-
 var rootDir = thisProcess.nowExecutingPath.asString.dirname;
 var outputPath = rootDir +/+ "petroske_assignment_x.wav";
 var headerFormat = "WAV";
@@ -40,13 +38,13 @@ sinCosPanLaw = { arg angleInDegrees = 0;
     [theta.cos, theta.sin]
 };
 
-
 score.write(
     path: outputPath.standardizePath,
-    sampleRate: sampleRate,
+	sampleRate: sampleRate,
     headerFormat: headerFormat,
     sampleFormat: sampleFormat,
-    options: ServerOptions.new.numOutputBusChannels_(numOutputChannels)
+    options: ServerOptions.new.numOutputBusChannels_(numOutputChannels),
+	action: { AppClock.sched(0, {SFPlayer(outputPath).gui;}) }
 );
 )
 
