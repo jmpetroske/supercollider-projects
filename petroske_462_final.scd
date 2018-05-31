@@ -227,7 +227,7 @@ lpf_synth = CtkSynthDef.new(\lpf_synth, {arg inbus, outbus, freq, drywet = 1;
 stack_grain_bufs = {arg left_buf, right_buf, gain = 0, num, start, duration, skipdiff = 0, outbus = 0, playbackRate = 1, grainFreq = 400;
 	num.do({arg i;
 		score.add(sync_grain_buf_synth.note(starttime: start, duration: duration)
-			.dur_(20)
+			.dur_(duration)
 			.gain_(gain)
 			.envFreq_(grainFreq * playbackRate / 2)
 			.grainFreq_(grainFreq * playbackRate)
@@ -349,7 +349,7 @@ score.add(reverb1.note(starttime: 0, duration: 180)
 	var timeOffset = 33.75;
 	var now = 0.0;
 	var dur = 35;
-	var noteRateEnv = Env([1 / 0.3125, 167 / 4], 10, \lin);
+	var noteRateEnv = Env([1 / 0.3125, 167 / 4], 10, \exp);
 	var curFreq = 1 / 0.3125;
 
 	var isd_compensation = 0.1;
@@ -380,6 +380,28 @@ score.add(reverb1.note(starttime: 0, duration: 180)
 		now = now + (1 / noteRateEnv.at(now)) + 0.rrand(0.001);
 	});
 }.value();
+
+stack_grain_bufs.(left_buf: sample1_buf_0,
+	right_buf: sample1_buf_1,
+	gain: 6,
+	num: 12,
+	start: 33.75,
+	duration: 33,
+	skipdiff: 2,
+	playbackRate: 0.5,
+	outbus: route1
+);
+
+stack_grain_bufs.(left_buf: sample1_buf_0,
+	right_buf: sample1_buf_1,
+	gain: 6,
+	num: 8,
+	start: 33.75,
+	duration: 33,
+	skipdiff: 2,
+	playbackRate: 1,
+	outbus: route1
+);
 
 score.write(
     path: outputPath.standardizePath,
