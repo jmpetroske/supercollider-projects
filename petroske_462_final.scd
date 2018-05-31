@@ -1,6 +1,7 @@
 (
+// Score params
 var rootDir = thisProcess.nowExecutingPath.asString.dirname;
-var outputPath = rootDir +/+ "out" +/+ "petroske_assignment_4.wav";
+var outputPath = rootDir +/+ "out" +/+ "petroske_462_final.wav";
 var headerFormat = "WAV";
 var sampleFormat = "int24";
 var numOutputChannels = 2;
@@ -8,17 +9,27 @@ var sampleRate = 44100;
 
 var score = CtkScore.new;
 
+// utility funcs
 var sinCosPanLaw, equalPower;
 var sync_grain_buf_synth;
+var t60Func;
 
+// synth defs
 var lpf_synth;
 var fir_filter;
 var infinite_sustain_synth;
+var reverb1;
 
+// busses
 var route1 = CtkAudio.new(2);
+var route2 = CtkAudio.new(2);
+var route3 = CtkAudio.new(2);
+var route4 = CtkAudio.new(2);
 
+// note generation funcs
 var stack_grain_bufs;
 
+// buffer loading stuff
 var sample1_buf_0;
 var sample1_buf_1;
 var sample1_path = rootDir +/+ "sounds" +/+ "dull_jingle.wav";
@@ -84,6 +95,16 @@ equalPower = { arg sig1, sig2, mix = 0.5;
 	(sig1*(1-mix).sqrt) + (sig2*mix.sqrt);
 };
 
+t60Func = { arg delay, gFac;
+
+    var t60;
+
+    t60 = gFac.sign * (-3 * delay / log10(gFac.abs));
+
+    // return
+    t60;
+};
+
 fir_filter = CtkSynthDef.new(\fir_filter, {
 	arg inbus, outbus = 0, filterBuf, drywet = 1;
 
@@ -91,6 +112,54 @@ fir_filter = CtkSynthDef.new(\fir_filter, {
 	var wet = Convolution2.ar(dry, filterBuf, framesize: filterBuf.size);
 
 	Out.ar(outbus, equalPower.(dry, wet, drywet));
+});
+
+reverb1 = CtkSynthDef.new(\my_reverb1, {arg dur, drywet = 1, inbus, outbus, gain,
+	feedbackGain = -9, maxDelay = 0.15, feedbackDelay = 0.1, feedbackDelayRandom = 0.05, filterAmount = 0.19, lowpassMix = 0.95, lowpassRand = 0.05;
+
+	var feedbackRandomFreq = 10;
+	var lowpassFreq = 4000;
+
+	var wet;
+	var filtered;
+	var lowpassedWet;
+
+
+	var samplerate = 20000;
+	var combsparams = [
+		[901, 0.805],
+		[778, 0.827],
+		[1011, 0.783],
+		[1123, 0.764]].collect({arg item;
+			[item[0] / samplerate, item[1]];
+		});
+	
+	var allpass1params = [125 / samplerate, 0.7];
+	var allpass2params = [42 / samplerate, 0.7];
+	var allpass3params = [12 / samplerate, 0.7];
+
+	var dry = In.ar(inbus, 2) * gain.dbamp;
+
+	filtered = dry + (feedbackGain.dbamp * LocalIn.ar(2));
+	filtered = combsparams.collect({arg item;
+		CombC.ar(filtered, item[0], item[0], t60Func.value(item[0], item[1]));
+	}).sum;
+
+	filtered = AllpassC.ar(filtered, allpass1params[0], allpass1params[0], t60Func.value(allpass1params[0], allpass1params[1]));
+	filtered = AllpassC.ar(filtered, allpass2params[0], allpass2params[0], t60Func.value(allpass2params[0], allpass2params[1]));
+	filtered = AllpassC.ar(filtered, allpass3params[0], allpass3params[0], t60Func.value(allpass3params[0], allpass3params[1]));
+	filtered = LeakDC.ar(filtered);
+	wet = equalPower.value(dry, filtered, filterAmount);
+	lowpassedWet = LPF.ar(wet, LFNoise2.ar(feedbackRandomFreq, lowpassRand, lowpassMix));
+	lowpassedWet = equalPower.value(wet, lowpassedWet, lowpassMix);
+	
+	LocalOut.ar(
+		DelayN.ar(
+			lowpassedWet,
+			maxDelay,
+			LFNoise2.ar(feedbackRandomFreq, feedbackDelayRandom, feedbackDelay)));
+	
+	Out.ar(outbus, equalPower.value(dry, wet, drywet));
 });
 
 infinite_sustain_synth = CtkSynthDef.new(\infinite_sustain_synth, {
@@ -190,65 +259,134 @@ score.add(infinite_sustain_synth.note(starttime: 0.001, duration: 20)
 	.outbus_(route1)
 );
 
-score.add(lpf_synth.note(starttime: 0, duration: 180)
+score.add(lpf_synth.note(starttime: 0.0001, duration: 180)
 	.inbus_(route1)
-	.outbus_(0)
-	.freq_(CtkControl.env(Env([100, 3000], 20, 2)))
+	.outbus_(route2)
+	.freq_(CtkControl.env(Env([100, 3000, 3000, 500, 50], [20, 18, 22, 8], 2)))
 	.drywet_(1)
 );
 
-
-stack_grain_bufs.(left_buf: sample1_buf_0,
-	right_buf: sample1_buf_1,
-	gain: 17,
-	num: 5,
-	start: 20.3,
-	duration: 10,
-	skipdiff: 2,
-	playbackRate: 0.5,
-	outbus: route1
-);
-
-stack_grain_bufs.(left_buf: sample1_buf_0,
-	right_buf: sample1_buf_1,
-	gain: 14,
-	num: 3,
-	start: 20.3,
-	duration: 10,
-	skipdiff: 2,
-	playbackRate: 1,
-	outbus: route1
-);
-
-score.add(sync_grain_buf_synth.note(starttime: 20.3, duration: 0.42)
-	.dur_(0.85)
-	.gain_(20)
-	.envFreq_(167 / 2)
-	.grainFreq_(167)
-	.periodFreq_(167)
-	.pitchshift_(1)
-	.playbackRate_(2)
-	.buffer_left_(sample6_buf_0)
-	.buffer_right_(sample6_buf_1)
+score.add(reverb1.note(starttime: 0, duration: 180)
+	.dur_(180)
+	.drywet_(0.3)
+	.inbus_(route2)
 	.outbus_(0)
+	.gain_(-3)
+	.feedbackGain_(-9)
+	.filterAmount_(0.3)
 );
 
-score.add(infinite_sustain_synth.note(starttime: 20.1, duration: 10)
-	.dur_(20)
-	.ris_(0.1)
-	.gain_(12)
-	.kernelbuf_(kernel2_buf)
-	.drywet_(1)
-	.outbus_(0)
-);
 
+
+[
+	[21, 5 - 0.2],
+	[25, 2.5 - 0.2],
+	[27.5, 1.25 - 0.2],
+	[28.75, 0.625 - 0.1],
+	[28.75 + (0.625 * 1), 0.625 - 0.1],
+	[28.75 + (0.625 * 2), 0.625 - 0.1],
+	[28.75 + (0.625 * 3), 0.625 - 0.1],
+	[31.25, 0.3125 - 0.07],
+	[31.25 + (0.3125 * 1), 0.3125 - 0.07],
+	[31.25 + (0.3125 * 2), 0.3125 - 0.07],
+	[31.25 + (0.3125 * 3), 0.3125 - 0.07],
+	[31.25 + (0.3125 * 4), 0.3125 - 0.07],
+	[31.25 + (0.3125 * 5), 0.3125 - 0.07],
+	[31.25 + (0.3125 * 6), 0.3125 - 0.07],
+	[31.25 + (0.3125 * 7), 0.3125 - 0.07],
+	[31.25 + (0.3125 * 8), 0.3125 - 0.07],
+].do({arg data, i;
+	var start = data[0];
+	var dur = data[1];
+	var isd_compensation = 0.2;
+	
+	stack_grain_bufs.(left_buf: sample1_buf_0,
+		right_buf: sample1_buf_1,
+		gain: 17,
+		num: 5,
+		start: start,
+		duration: dur,
+		skipdiff: 2,
+		playbackRate: 0.5,
+		outbus: route1
+	);
+
+	stack_grain_bufs.(left_buf: sample1_buf_0,
+		right_buf: sample1_buf_1,
+		gain: 14,
+		num: 3,
+		start: start,
+		duration: dur,
+		skipdiff: 2,
+		playbackRate: 1,
+		outbus: route1
+	);
+
+	score.add(sync_grain_buf_synth.note(starttime: start, duration: 0.45)
+		.dur_(0.45)
+		.gain_(20)
+		.envFreq_(167 / 2)
+		.grainFreq_(167)
+		.periodFreq_(167)
+		.pitchshift_(1)
+		.playbackRate_(2)
+		.buffer_left_(sample6_buf_0)
+		.buffer_right_(sample6_buf_1)
+		.outbus_(route1)
+	);
+
+	score.add(infinite_sustain_synth.note(starttime: start - isd_compensation, duration: dur + isd_compensation)
+		.dur_(dur + isd_compensation)
+		.ris_(0.1)
+		.gain_(12)
+		.kernelbuf_(kernel2_buf)
+		.drywet_(1)
+		.outbus_(route1)
+	);
+});
+
+{
+	var timeOffset = 33.75;
+	var now = 0.0;
+	var dur = 35;
+	var noteRateEnv = Env([1 / 0.3125, 167 / 4], 10, \lin);
+	var curFreq = 1 / 0.3125;
+
+	var isd_compensation = 0.1;
+	
+	while({now < dur}, {
+		score.add(sync_grain_buf_synth.note(starttime: timeOffset + now, duration: 0.45)
+			.dur_(0.45)
+			.gain_(20)
+			.envFreq_(167 / 2)
+			.grainFreq_(167)
+			.periodFreq_(167)
+			.pitchshift_(1)
+			.playbackRate_(2)
+			.buffer_left_(sample6_buf_0)
+			.buffer_right_(sample6_buf_1)
+			.outbus_(route1)
+		);
+
+		score.add(infinite_sustain_synth.note(starttime: timeOffset + now - isd_compensation, duration: 0.45 + isd_compensation)
+			.dur_(0.45 + isd_compensation)
+			.ris_(0.1)
+			.gain_(12)
+			.kernelbuf_(kernel2_buf)
+			.drywet_(1)
+			.outbus_(route1)
+		);
+
+		now = now + (1 / noteRateEnv.at(now)) + 0.rrand(0.001);
+	});
+}.value();
 
 score.write(
     path: outputPath.standardizePath,
 	sampleRate: sampleRate,
     headerFormat: headerFormat,
     sampleFormat: sampleFormat,
-    options: ServerOptions.new.numOutputBusChannels_(numOutputChannels),
+    options: ServerOptions.new.numOutputBusChannels_(numOutputChannels).memSize_(2**21),
 	action: { AppClock.sched(0, {SFPlayer(outputPath).gui;}) }
 );
 )
