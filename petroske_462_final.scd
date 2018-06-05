@@ -12,18 +12,22 @@ var score = CtkScore.new;
 // utility funcs
 var sinCosPanLaw, equalPower;
 var sync_grain_buf_synth;
+var sync_grain_buf_with_comb_synth;
 var t60Func;
 var schroederCoeffFunc, regaliaMitraCoeff, combDelayFunc, combT60Func;
 var iirCombCoeffsFunc;
+var vibSinDelTimeFunc, sinCosPanMatrix, widthMatrix, rotateMatrix, spatFilt;
 
 
 // synth defs
+var lesSynthDef;
 var lpf_synth;
 var fir_filter;
 var infinite_sustain_synth;
 var reverb1;
 var sweeper;
 var enhancer;
+var part4magicFilter;
 
 var odd_comb_synth, even_comb_synth;
 
@@ -36,6 +40,7 @@ var route4 = CtkAudio.new(2);
 var route5 = CtkAudio.new(2);
 var route6 = CtkAudio.new(2);
 var route7 = CtkAudio.new(2);
+var route8 = CtkAudio.new(2);
 
 // note generation funcs
 var stack_grain_bufs;
@@ -90,6 +95,97 @@ score.add(sample5_buf_0);
 score.add(sample5_buf_1);
 score.add(sample6_buf_0);
 score.add(sample6_buf_1);
+
+// function to calculate sinus delay time
+//
+// Sinus Delay Time
+vibSinDelTimeFunc = { arg ratio, rate;
+
+        var delayTime;
+
+        delayTime = (ratio - 1) / (pi * rate);
+
+        // return
+        delayTime;
+};
+
+
+// a function to return amplitude coefficients for Sine-Cosine Panning Law - Matrix form
+// position argument in degrees
+sinCosPanMatrix = { arg angleInDegrees = 0;
+    var angleInRadians;
+    var theta;
+
+    angleInRadians = angleInDegrees/180*pi;
+
+    theta = pi/4 - angleInRadians;
+
+    Array2D.fromArray(
+        2, // rows, outputs
+        1, // columns, inputs
+        [
+            theta.cos,
+            theta.sin
+        ]
+    )
+};
+
+
+// a function to return coefficients for Width- Matrix form
+// width argument in degrees
+widthMatrix = { arg angleInDegrees = 0;
+    var angleInRadians;
+    var theta;
+
+    angleInRadians = angleInDegrees/180*pi;
+
+    theta = angleInRadians;
+
+    Array2D.fromArray(
+        2, // rows, outputs
+        2, // columns, inputs
+        [
+            theta.cos, -1 * theta.sin,
+            -1 * theta.sin, theta.cos
+        ]
+    )
+};
+
+
+// a function to return coefficients for Rotate- Matrix form
+// position argument in degrees
+rotateMatrix = { arg angleInDegrees = 0;
+    var angleInRadians;
+    var theta;
+
+    angleInRadians = angleInDegrees/180*pi;
+
+    theta = angleInRadians;
+
+    Array2D.fromArray(
+        2, // rows, outputs
+        2, // columns, inputs
+        [
+            theta.cos, theta.sin,
+            -1 * theta.sin, theta.cos
+        ]
+    )
+};
+
+
+// spatial filter - a function we'll use inside our synthDef below...
+spatFilt = { arg in, coeffMatrix;
+
+    // wrap input as array if needed, for mono inputs
+    in.isArray.not.if({ in = [in] });
+
+    Mix.fill( coeffMatrix.cols, { arg i; // fill input
+        UGen.replaceZeroesWithSilence(
+            coeffMatrix.asArray.reshape(coeffMatrix.rows, coeffMatrix.cols).flop.at(i) * in.at(i)
+        )
+    })
+};
+
 
 sinCosPanLaw = { arg angleInDegrees = 0;
     var angleInRadians;
@@ -158,6 +254,63 @@ iirCombCoeffsFunc = { arg gain;
     // return
     Array.with(cFac, gFac);
 };
+
+part4magicFilter = CtkSynthDef.new(\magic_filter, {arg inbus, outbus = 0, drywet = 1;
+	var dry = In.ar(inbus, 2);
+	var wet;
+
+	wet = dry;
+	
+	Out.ar(outbus, equalPower.(dry, wet, drywet));
+});
+
+lesSynthDef = CtkSynthDef.new(\stereoInLeslieSynth, {arg dur, gain = 0.0, ris = 0.01, dec = 0.01, mix = 1.0, panAngle = 0.0, widthAngle = 35.0, rate = 2.0, minRate = 6.0, ratio = 1.01, maxRatio = 1.01, receiveBus;
+    var bus = 0;      // var to specify output bus: first output
+    var numChannels = 2; // stereo bus!
+    var amp;          // a few vars for synthesis
+    var maxDelayTime, delayTime;
+    var sig, out;     // vars assigned to audio signals
+    var delay, delayPos, delayNeg;
+    var modLFO;
+    var ampEnv;       // var for envelope signal
+
+    // calcs
+    amp = gain.dbamp;  // convert from gain in dB to linear amplitude scale
+    maxDelayTime = vibSinDelTimeFunc.value(maxRatio, minRate);
+    delayTime = vibSinDelTimeFunc.value(ratio, rate);
+
+    // the amplitude envelope nested in the UGen that synthesises the envelope
+    ampEnv = EnvGen.kr(
+        Env.linen(ris, 1.0 - (ris + dec), dec),
+        timeScale: dur
+    );
+
+    // read sound in
+    sig = In.ar(receiveBus, numChannels);
+
+    // delay line modulator (unscaled)
+    modLFO = SinOsc.ar(rate, pi/2);
+
+    // modulated delay line
+    delayPos = DelayC.ar(sig, maxDelayTime, modLFO.range(0, 1) * delayTime);
+    delayNeg = DelayC.ar(sig, maxDelayTime, (-1 * modLFO).range(0, 1) * delayTime);
+
+    // tremelo
+    delayPos = delayPos * modLFO.range(0, 1);
+    delayNeg = delayNeg * (-1 * modLFO).range(0, 1);
+
+    // width
+    delay = spatFilt.value(delayPos, rotateMatrix.value(widthAngle)) + spatFilt.value(delayNeg, rotateMatrix.value(-1 * widthAngle));
+
+    // rotate
+    delay = spatFilt.value(delay, rotateMatrix.value(panAngle));
+
+    // out & envelope
+    out = amp * ampEnv * delay;
+
+    // out!!
+    Out.ar(bus, out)
+});
 
 
 fir_filter = CtkSynthDef.new(\fir_filter, {
@@ -294,6 +447,60 @@ sync_grain_buf_synth = CtkSynthDef.new(\sync_grain_buf_synth, {arg dur, gain, ri
     Out.ar(outbus, gain.dbamp * ampEnv * (granSig0 + granSig1) * sinCosPanLaw.value(panAngle));
 });
 
+sync_grain_buf_with_comb_synth = CtkSynthDef.new(\sync_grain_buf_with_comb_synth, {arg dur, gain, ris = 8, dec = 8, pitchshift = 1, playbackRate = 1, envFreq, grainFreq, periodFreq = 200, buffer_left = 0, buffer_right = 0, outbus = 0, panAngle = 0.0, skiptime = 0, minFreq = 20, combFreq = 440, combGain = -60;
+    var trigger;
+    var granSig0, granSig1;
+    var out;
+    var ampEnv;
+	var index;
+	var numPeriods = periodFreq * BufDur.kr(buffer_left);
+
+	var maxDelayTime, delayTime, decayTime;
+    var cFac, gFac;
+	
+	maxDelayTime = combDelayFunc.value(minFreq);
+    delayTime = combDelayFunc.value(combFreq);
+    #cFac, gFac = iirCombCoeffsFunc.value(combGain);
+    decayTime = combT60Func.value(delayTime, gFac);
+
+
+    ampEnv = EnvGen.kr(
+        Env.linen(ris, dur - (ris + dec), dec),
+    );
+
+    trigger = Impulse.ar(grainFreq); // async trigger
+	// index = Line.ar(0, 1, BufDur.kr(buffer_left));
+	// Does the same thing as the Line.ar version, but handles playbackRate changes better in my opinion
+	index = Phasor.ar(Impulse.ar(0), playbackRate / (SampleRate.ir * BufDur.kr(buffer_left)), 0, 1);
+	index = (index + (skiptime / BufDur.kr(buffer_left))) % 1;
+	// index = index.round(1 / numPeriods);
+	index = (index * numPeriods).floor / numPeriods; // periodize the index
+
+    granSig0 = GrainBuf.ar(
+		numChannels: 2,
+		trigger: trigger,
+		dur: envFreq.reciprocal,
+		sndbuf: buffer_left,
+		rate: pitchshift,
+		pos: index,
+		pan: -1
+	);
+	granSig0 = CombC.ar(granSig0, maxDelayTime, delayTime, -1 * decayTime, -1 * cFac * gFac, cFac * granSig0);
+
+	granSig1 = GrainBuf.ar(
+		numChannels: 2,
+		trigger: trigger,
+		dur: envFreq.reciprocal,
+		sndbuf: buffer_right,
+		rate: pitchshift,
+		pos: index,
+		pan: 1
+	);
+	granSig1 = CombC.ar(granSig1, maxDelayTime, delayTime, -1 * decayTime, -1 * cFac * gFac, cFac * granSig1);
+
+    Out.ar(outbus, gain.dbamp * ampEnv * (granSig0 + granSig1) * sinCosPanLaw.value(panAngle));
+});
+
 lpf_synth = CtkSynthDef.new(\lpf_synth, {arg inbus, outbus, freq, drywet = 1;
 	var insig = In.ar(inbus, 2);
 	Out.ar(outbus, equalPower.value(insig, LPF.ar(insig, freq), drywet));
@@ -402,25 +609,27 @@ score.add(reverb1.note(starttime: 0, duration: 180)
 	
 	stack_grain_bufs.(left_buf: sample1_buf_0,
 		right_buf: sample1_buf_1,
-		gain: 17,
-		num: 5,
+		gain: 15,
+		num: 4,
 		start: start,
 		duration: dur,
 		skipdiff: 2,
 		playbackRate: 0.5,
 		pitchShift: 0.5,
-		outbus: route1
+		outbus: route1,
+		panAngle: -5
 	);
 
 	stack_grain_bufs.(left_buf: sample1_buf_0,
 		right_buf: sample1_buf_1,
-		gain: 14,
+		gain: 10,
 		num: 3,
 		start: start,
 		duration: dur,
 		skipdiff: 2,
 		playbackRate: 1,
-		outbus: route1
+		outbus: route1,
+		panAngle: -5
 	);
 
 	score.add(sync_grain_buf_synth.note(starttime: start, duration: 0.45)
@@ -702,6 +911,12 @@ stack_grain_bufs.(
 
 // Big percussion
 {
+	var part4now = 0;
+	var part4noteRate = 8;
+	var part4noteDur = 16;
+	var part4duration = 48;
+	var part4gain;
+	
 	var time = 104.55022705;
 
 	score.add(enhancer.note(starttime: 0, duration: 180)
@@ -715,7 +930,7 @@ stack_grain_bufs.(
 
 	stack_grain_bufs.(left_buf: sample1_buf_0,
 		right_buf: sample1_buf_1,
-		gain: 12,
+		gain: 9,
 		num: 15,
 		start: time,
 		duration: 0.5,
@@ -730,7 +945,7 @@ stack_grain_bufs.(
 
 	stack_grain_bufs.(left_buf: sample1_buf_0,
 		right_buf: sample1_buf_1,
-		gain: 12,
+		gain: 9,
 		num: 15,
 		start: time,
 		duration: 0.5,
@@ -745,7 +960,7 @@ stack_grain_bufs.(
 
 	stack_grain_bufs.(left_buf: sample2_buf_0,
 		right_buf: sample2_buf_1,
-		gain: -15,
+		gain: -17,
 		num: 20,
 		start: time,
 		duration: 1.2,
@@ -754,7 +969,7 @@ stack_grain_bufs.(
 		pitchShift: 0.5,
 		ris: 0.06,
 		dec: 1.13,
-		panAngle: 0,
+		panAngle: -10,
 		outbus: route6
 	);
 
@@ -762,7 +977,7 @@ stack_grain_bufs.(
 	time = time + (6/7);
 	stack_grain_bufs.(left_buf: sample1_buf_0,
 		right_buf: sample1_buf_1,
-		gain: 12,
+		gain: 10,
 		num: 15,
 		start: time,
 		duration: 4.8,
@@ -777,7 +992,7 @@ stack_grain_bufs.(
 
 	stack_grain_bufs.(left_buf: sample1_buf_0,
 		right_buf: sample1_buf_1,
-		gain: 12,
+		gain: 10,
 		num: 15,
 		start: time,
 		duration: 0.8,
@@ -786,13 +1001,13 @@ stack_grain_bufs.(
 		pitchShift: 0.5,
 		ris: 0.06,
 		dec: 0.74,
-		panAngle: 0,
+		panAngle: -10,
 		outbus: route6
 	);
 
 	stack_grain_bufs.(left_buf: sample2_buf_0,
 		right_buf: sample2_buf_1,
-		gain: -15,
+		gain: -17,
 		num: 23,
 		start: time,
 		duration: 5,
@@ -801,7 +1016,7 @@ stack_grain_bufs.(
 		pitchShift: 0.5,
 		ris: 0.06,
 		dec: 4.93,
-		panAngle: 0,
+		panAngle: -10,
 		outbus: route6
 	);
 
@@ -819,7 +1034,7 @@ stack_grain_bufs.(
 		pitchShift: 1,
 		ris: 0.06,
 		dec: 0.06,
-		panAngle: 0,
+		panAngle: -10,
 		outbus: route5
 	);
 	time = time + (1/3.5) - 0.08;
@@ -835,7 +1050,7 @@ stack_grain_bufs.(
 			pitchShift: 0.5,
 			ris: 0.06,
 			dec: 0.06,
-			panAngle: 0,
+			panAngle: -10,
 			outbus: route5
 		);
 	});
@@ -844,7 +1059,7 @@ stack_grain_bufs.(
 	// hit 3
 	stack_grain_bufs.(left_buf: sample1_buf_0,
 		right_buf: sample1_buf_1,
-		gain: 12,
+		gain: 10,
 		num: 15,
 		start: time,
 		duration: 4.8,
@@ -853,13 +1068,13 @@ stack_grain_bufs.(
 		pitchShift: 1,
 		ris: 0.06,
 		dec: 4.74,
-		panAngle: 0,
+		panAngle: -10,
 		outbus: route4
 	);
 
 	stack_grain_bufs.(left_buf: sample1_buf_0,
 		right_buf: sample1_buf_1,
-		gain: 12,
+		gain: 10,
 		num: 15,
 		start: time,
 		duration: 0.8,
@@ -868,13 +1083,13 @@ stack_grain_bufs.(
 		pitchShift: 0.5,
 		ris: 0.06,
 		dec: 0.74,
-		panAngle: 0,
+		panAngle: -10,
 		outbus: route6
 	);
 
 	stack_grain_bufs.(left_buf: sample2_buf_0,
 		right_buf: sample2_buf_1,
-		gain: -15,
+		gain: -17,
 		num: 11,
 		start: time,
 		duration: 5,
@@ -883,13 +1098,13 @@ stack_grain_bufs.(
 		pitchShift: 0.5 * 3/2,
 		ris: 0.06,
 		dec: 4.93,
-		panAngle: 0,
+		panAngle: -10,
 		outbus: route6
 	);
 
 	stack_grain_bufs.(left_buf: sample2_buf_0,
 		right_buf: sample2_buf_1,
-		gain: -15,
+		gain: -17,
 		num: 12,
 		start: time,
 		duration: 5,
@@ -898,7 +1113,7 @@ stack_grain_bufs.(
 		pitchShift: 0.5,
 		ris: 0.06,
 		dec: 4.93,
-		panAngle: 0,
+		panAngle: -10,
 		outbus: route6
 	);
 
@@ -940,7 +1155,7 @@ stack_grain_bufs.(
 	// hit 4
 	stack_grain_bufs.(left_buf: sample1_buf_0,
 		right_buf: sample1_buf_1,
-		gain: 12,
+		gain: 10,
 		num: 15,
 		start: time,
 		duration: 4.8,
@@ -955,7 +1170,7 @@ stack_grain_bufs.(
 
 	stack_grain_bufs.(left_buf: sample1_buf_0,
 		right_buf: sample1_buf_1,
-		gain: 12,
+		gain: 10,
 		num: 15,
 		start: time,
 		duration: 0.8,
@@ -964,13 +1179,13 @@ stack_grain_bufs.(
 		pitchShift: 0.5,
 		ris: 0.06,
 		dec: 0.74,
-		panAngle: 0,
+		panAngle: -10,
 		outbus: route6
 	);
 
 	stack_grain_bufs.(left_buf: sample2_buf_0,
 		right_buf: sample2_buf_1,
-		gain: -15,
+		gain: -17,
 		num: 10,
 		start: time,
 		duration: 4,
@@ -979,13 +1194,13 @@ stack_grain_bufs.(
 		pitchShift: 1,
 		ris: 0.06,
 		dec: 3.93,
-		panAngle: 0,
+		panAngle: -100,
 		outbus: route6
 	);
 	
 	stack_grain_bufs.(left_buf: sample2_buf_0,
 		right_buf: sample2_buf_1,
-		gain: -15,
+		gain: -17,
 		num: 7,
 		start: time,
 		duration: 5,
@@ -994,13 +1209,13 @@ stack_grain_bufs.(
 		pitchShift: 0.5 * 3/2,
 		ris: 0.06,
 		dec: 4.93,
-		panAngle: 0,
+		panAngle: -5,
 		outbus: route6
 	);
 
 	stack_grain_bufs.(left_buf: sample2_buf_0,
 		right_buf: sample2_buf_1,
-		gain: -15,
+		gain: -16,
 		num: 6,
 		start: time,
 		duration: 4,
@@ -1009,7 +1224,7 @@ stack_grain_bufs.(
 		pitchShift: 0.5,
 		ris: 0.06,
 		dec: 3.93,
-		panAngle: 0,
+		panAngle: -10,
 		outbus: route6
 	);
 	time = time + 3.8;
@@ -1047,9 +1262,112 @@ stack_grain_bufs.(
 	});
 	time = time + (5/3.5);
 
-	// TODO
-}.value();
+	while({part4now < part4duration}, {
 
+		var startRis = part4noteDur / 2;
+
+		(part4now == 0).if({
+			startRis = 0.3;
+		});
+
+		score.add(sync_grain_buf_with_comb_synth.note(starttime: time + part4now, duration: part4noteDur)
+			.dur_(part4noteDur)
+			.gain_(22)
+			.ris_(startRis)
+			.dec_(part4noteDur / 2)
+			.pitchshift_(CtkControl.env(Env([2, 0.5], [16], \exp)))
+			.playbackRate_(CtkControl.env(Env([2, 0.5], [16], \exp)))
+			.envFreq_(625 / 2)
+			.grainFreq_(625)
+			.periodFreq_(625)
+			.buffer_left_(sample5_buf_0)
+			.buffer_right_(sample5_buf_1)
+			.skiptime_(0.rrand(15))
+			.outbus_(route7)
+			.combFreq_(CtkControl.env(Env([2 * 625, 0.5 * 625], [16], \exp)))
+			.combGain_(-50)
+			.panAngle_(-10)
+		);
+
+		score.add(sync_grain_buf_with_comb_synth.note(starttime: time + part4now, duration: part4noteDur)
+			.dur_(part4noteDur)
+			.gain_(20)
+			.ris_(startRis)
+			.dec_(part4noteDur / 2)
+			.pitchshift_(CtkControl.env(Env([1, 0.25], [16], \exp)))
+			.playbackRate_(CtkControl.env(Env([1, 0.25], [16], \exp)))
+			.envFreq_(625 / 2)
+			.grainFreq_(625)
+			.periodFreq_(625)
+			.buffer_left_(sample5_buf_0)
+			.buffer_right_(sample5_buf_1)
+			.skiptime_(0.rrand(15))
+			.outbus_(route7)
+			.combFreq_(CtkControl.env(Env([625, 0.25 * 625], [16], \exp)))
+			.combGain_(-50)
+			.panAngle_(10)
+		);
+		
+		part4now = part4now + part4noteRate;
+	});
+
+	score.add(lesSynthDef.note(starttime: time - 1, duration: 60)
+		.dur_(60)
+		.ratio_(1.02)
+		.maxRatio_(1.02)
+		.receiveBus_(route7)
+		.gain_(CtkControl.env(Env([0, 20], [50], \lin)));
+	);
+	
+	time = time + 4;
+	part4now = 0;
+	part4noteRate = Env([2, 0.7, 0.15, 0.1], [36, 6, 4], \lin);
+	part4noteDur = Env([1.4, 0.6, 0.2], [36, 6], \lin);
+	part4duration = 50;
+	part4gain = Env([4, 15], [50], \lin);
+	while({part4now < part4duration}, {
+		var thisStart = time + (part4now + -0.3.rrand(0.3));
+		var thisDur = part4noteDur.at(part4now) * 0.7.rrand(1.3);
+		var thisGain = part4gain.at(part4now) + 0.rrand(5);
+		score.add(sync_grain_buf_with_comb_synth.note(starttime: thisStart, duration: thisDur)
+			.dur_(thisDur)
+			.gain_(thisGain)
+			.ris_(0.03)
+			.dec_(0.03)
+			.pitchshift_(1)
+			.playbackRate_(CtkControl.env(Env([2, 0.5], [16], \exp)))
+			.envFreq_(400)
+			.grainFreq_(800)
+			.periodFreq_(800)
+			.buffer_left_(sample4_buf_0)
+			.buffer_right_(sample4_buf_1)
+			.skiptime_(0.rrand(7))
+			.outbus_(route8)
+			.combFreq_(CtkControl.env(Env([700.rrand(1400), 300.rrand(3000)], [thisDur], \exp)))
+			.combGain_(-30)
+			.panAngle_(CtkControl.env(
+				Env([-30.rrand(30), -30.rrand(30)],
+					[(thisDur * 0.8).rrand(thisDur)],
+					[\lin])))
+		);
+
+		// arg inbus, outbus, preFreq = 100, postFreq = 200, processGain, mixGain = 0;
+
+		
+		part4now = part4now + part4noteRate.at(part4now);
+	});
+
+	score.add(enhancer.note(starttime: time - 0.01, duration: 60)
+		.inbus_(route8)
+		.outbus_(0)
+		.preFreq_(200)
+		.postFreq_(400)
+		.processGain_(12)
+		.mixGain_(12)
+	);
+
+	time = time + part4now;
+}.value();
 
 score.write(
     path: outputPath.standardizePath,
